@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # create releases and tags
-      id-token: write  # PyPI OIDC publishing
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +32,4 @@ jobs:
       - name: Run semantic release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_USERNAME: __token__
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: semantic-release version --changelog --commit --tag --build
+        run: semantic-release version --changelog --commit --tag --skip-build
