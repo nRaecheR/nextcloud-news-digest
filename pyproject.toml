@@ -1,6 +1,6 @@
 [project]
 name = "nextcloud-news-digest"
-version = "0.1.0"
+version = "1.0.0"
 description = "Fetch unread news from a Nextcloud News server and generate documents for Open-Notebook import"
 readme = "README.md"
 license = "MIT"
