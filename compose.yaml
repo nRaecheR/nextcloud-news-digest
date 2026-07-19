@@ -1,0 +1,22 @@
+services:
+  nextcloud-news-digest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nextcloud-news-digest
+    environment:
+      PYTHONPATH: /app
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - type: bind
+        source: .env
+        target: /app/.env
+        read_only: true
+      - type: bind
+        source: output
+        target: /output
+      - type: bind
+        source: .news-digest
+        target: /app/.news-digest
+    working_dir: /app
+    command: ["python", "src/main.py"]
