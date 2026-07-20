@@ -1,6 +1,6 @@
 # Nextcloud News Digest
 
-Fetches unread news items from a [Nextcloud News](https://github.com/nextcloud/news) server, generates output documents (Markdown, Markdown with inline images, PDF, plain text, JSON) and imports them into an AI-powered notebook — [Open-Notebook](https://github.com/nicholasgasior/open-notebook) (Markdown import) or [Google Gemini Notebook](https://notebooklm.google.com/) (NotebookML import). Runs inside a Podman or Docker container.
+Fetches unread news items from a [Nextcloud News](https://github.com/nextcloud/news) server, generates output documents (Markdown, Markdown with inline images, PDF, plain text, JSON) and imports them into an AI-powered notebook — [Open-Notebook](https://github.com/lfnovo/open-notebook) (Markdown import) or [Google Gemini Notebook](https://notebooklm.google.com/). Runs inside a Podman or Docker container.
 
 ## Links
 
@@ -9,9 +9,7 @@ Fetches unread news items from a [Nextcloud News](https://github.com/nextcloud/n
 | Nextcloud | https://nextcloud.com/ |
 | Nextcloud News app | https://apps.nextcloud.com/apps/news |
 | Nextcloud News API docs | https://github.com/nextcloud/news |
-| Open-Notebook | https://github.com/nicholasgasior/open-notebook |
 | Google Gemini Notebook | https://notebooklm.google.com/ |
-| NotebookML format | https://github.com/google-gemini/notebookml (reference) |
 
 ## Prerequisites
 
@@ -37,7 +35,7 @@ cp .env.example .env
 | `NEWS_FOLDER` | Folder name in Nextcloud News |
 | `NEWS_FEED` | Feed name within the folder |
 | `OUTPUT_FORMATS` | Comma-separated output formats: `md`, `md-inline`, `pdf`, `txt`, `json` (default: `md`) |
-| `DAYS_PER_FILE` | Split Markdown and PDF output into date windows: `0` = single flat file, `1` = one file per day, `7` = weekly chunks (default: 7) |
+| `DAYS_PER_FILE` | Split Markdown and PDF output into date windows: `1` (default) = single flat file, `0` = normalized to default (single file), `7` = weekly chunks |
 | `STATE_MODE` | State tracking strategy: `mark_read` = fetch all unread, mark as read on server (default), `file` = save/load timestamp to `.news-digest/state.json` (legacy), `none` = always fetch all unread, no state saved |
 
 ## Build
@@ -104,21 +102,23 @@ Generated files are placed in format-specific subdirectories under `output/` wit
 
 ```
 output/md/
-    news_20260718_143000_p001.md      # Markdown (weekly chunk 1)
-    news_20260718_143000_p002.md      # Markdown (weekly chunk 2)
-    images/                           # downloaded images (multi-format cache)
+    MyFolder_MyFeed_20260718_143000_p001.md   # Markdown (weekly chunk 1)
+    MyFolder_MyFeed_20260718_143000_p002.md   # Markdown (weekly chunk 2)
+    images/                                   # downloaded images (shared cache)
 output/md-inline/
-    news_20260718_143000.md           # Markdown with base64-embedded images
-    images/
+    MyFolder_MyFeed_20260718_143000.md        # Markdown with base64-embedded images
+    images/                                   # temporary cache (cleaned after render)
 output/pdf/
-    news_20260718_143000_p001.pdf     # PDF (weekly chunk 1, images embedded)
-    news_20260718_143000_p002.pdf     # PDF (weekly chunk 2)
-    images/
+    MyFolder_MyFeed_20260718_143000_p001.pdf  # PDF (weekly chunk 1, images embedded)
+    MyFolder_MyFeed_20260718_143000_p002.pdf  # PDF (weekly chunk 2)
+    images/                                   # temporary cache (cleaned after render)
 output/txt/
-    news_20260718_143000.txt          # Plain text
+    MyFolder_MyFeed_20260718_143000.txt       # Plain text
 output/json/
-    news_20260718_143000.json         # Structured JSON
+    MyFolder_MyFeed_20260718_143000.json      # Structured JSON
 ```
+
+> **Note:** The filename prefix is `{folder_name}_{feed_name}_{YYYYMMDD_HHMMSS}` — replace `MyFolder_MyFeed` with your actual folder and feed names.
 
 ### Format Details
 
@@ -130,47 +130,54 @@ output/json/
 | `txt` | Plain text with stripped HTML content. Single file. |
 | `json` | Structured JSON array with all item metadata (title, author, date, time, body, URL). Single file. |
 
-### Markdown Structure (Open-Notebook / NotebookML compatible)
+### Markdown Structure (compatible with Open-Notebook / Gemini Notebook)
 
 The Markdown files use a structured heading hierarchy designed for AI-powered Q&A:
 
 ```markdown
 # Feed Name
-Fetch Date: 2026-07-18 14:30:00 UTC
 
-## 2026-07-18 (Week 29)
+**Folder:** MyFolder
+**Fetch Date:** 2026-07-18 14:30:00 UTC
+**Total Items:** 42
+
+---
+## 2026-07-18
 
 ### Title of the Article
-Author: Jane Doe
-Date: 2026-07-18 10:22:00
 
 Description excerpt (HTML-stripped) with [link to full article](https://...).
 
-![Description image](../images/uuid.jpg)
+![Description image](images/uuid.jpg)
+
+*Author: Jane Doe | Date: 2026-07-18 | Time: 10:22:00*
+
+[https://example.com/article](https://example.com/article)
 ```
 
 - `# Feed Name` — top-level heading identifying the feed
-- `## Date` (or `## Week N`) — items grouped by day or week based on `DAYS_PER_FILE`
-- `### Title` — each article heading with author, date, and time metadata
-- Body content — HTML-stripped description with inline links and image references
-- Long bodies (>2 KB) are truncated with a "(truncated)" suffix
+- `**Folder:**`, `**Fetch Date:**`, `**Total Items:**` — metadata lines
+- Separator line (`---`) before each date group
+- `## YYYY-MM-DD` — items grouped by calendar date (split into separate files by `DAYS_PER_FILE`)
+- `### Title` — each article heading
+- Body content — HTML-stripped, truncated to 2000 characters with a "(truncated)" suffix
+- `*Author | Date | Time*` — metadata row (italic)
+- Article link as a standalone markdown link
+- Images referenced as relative `images/` links (downloaded to `output/<format>/images/`)
 
 ## Import to an AI Notebook
 
 ### Open-Notebook (Markdown)
 
-1. Open [Open-Notebook](https://github.com/nicholasgasior/open-notebook)
-2. Click **Add Source** → **Upload File**
-3. Select the generated `.md` file from the `output/md/` directory
-4. The content is processed and ready for AI-powered Q&A
+Upload generated Markdown files to [Open-Notebook](https://github.com/lfnovo/open-notebook) for AI-powered Q&A.
 
-### Google Gemini Notebook (NotebookML)
+### Google Gemini Notebook
 
-The Markdown structure is compatible with [Google Gemini Notebook](https://notebooklm.google.com/). Upload generated Markdown files as sources to enable AI-powered summarization, note-taking, and audio overviews. Notebook LM accepts Markdown, MarkdownML, and PDF as source formats.
+Upload generated Markdown files as sources to [Google Gemini Notebook](https://notebooklm.google.com/) to enable AI-powered summarization, note-taking, and audio overviews. Gemini Notebook accepts Markdown and PDF as source formats.
 
 ## Testing
 
-All 98 tests run inside the container. The build step runs tests automatically as its final CMD.
+All 112 tests run inside the container. The build step runs tests automatically as its final CMD.
 
 To run tests separately:
 
@@ -200,7 +207,7 @@ podman run --rm nextcloud-news-digest python -m pytest tests/test_document.py::T
                                                ┌───┼───┬───┬───┐
                                                ▼   ▼   ▼   ▼   ▼
                                          output/md  md-inline  pdf  txt  json
-                                         output/news_YYYYMMDD_HHMMSS.{ext}
+                                         output/{folder}_{feed}_{YYYYMMDD_HHMMSS}.{ext}
 ```
 
 ### Module Map
@@ -226,7 +233,7 @@ podman run --rm nextcloud-news-digest python -m pytest tests/test_document.py::T
   - `file`: legacy behavior — a `.news-digest/state.json` file stores the last fetched timestamp. Subsequent runs only fetch new items.
   - `none`: always fetch all unread items, no state saved or server mutations.
 - **Per-format image downloading**: Each format renderer downloads images independently from the raw article HTML. A shared in-memory cache prevents duplicate downloads within a single run.
-- **File splitting**: Markdown and PDF output can be split by configurable date windows (`DAYS_PER_FILE`). Set to `0` for a single flat file.
+- **File splitting**: Markdown and PDF output can be split by configurable date windows (`DAYS_PER_FILE`). Set to `1` for a single flat file (default is `7`, weekly chunks).
 - **Client-side feed filtering**: The Nextcloud News API ignores the `feedId` query parameter — items are filtered client-side after fetching from `/items/updated`.
 
 ## Adding a New Format
